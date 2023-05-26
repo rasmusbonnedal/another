@@ -19,6 +19,11 @@
 #include "../libs/emscripten/emscripten_mainloop_stub.h"
 #endif
 
+#include "memlist.h"
+#include "sound.h"
+
+#include <iostream>
+
 // Main code
 int main(int argc, char* argv[])
 {
@@ -99,6 +104,21 @@ int main(int argc, char* argv[])
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
     //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, nullptr, io.Fonts->GetGlyphRangesJapanese());
     //IM_ASSERT(font != nullptr);
+
+    MemList memlist;
+    if (!memlist.init("..\\..\\data\\memlist.bin")) {
+        std::cout << "Could not read memlist.bin" << std::endl;
+        return 0;
+    }
+    Audio audio;
+    audio.play();
+    for (int i = 0; i < memlist.entries(); ++i) {
+        const MemList::MemEntry& me = memlist.entry(i);
+        if (me.size == me.unpackedSize && me.type == MemList::RT_SOUND && me.size > 0) {
+            Resource r1(memlist.entry(i));
+            playsound(audio, r1.data(), r1.size());
+        }
+    }
 
     // Our state
     bool show_demo_window = true;

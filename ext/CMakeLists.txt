@@ -1,8 +1,8 @@
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 # https://github.com/libsdl-org/SDL
-set(SDL_STATIC ON)
-set(SDL_SHARED OFF)
+set(SDL_STATIC ON CACHE BOOL "" FORCE)
+set(SDL_SHARED OFF CACHE BOOL "" FORCE)
 set(SDL2_DISABLE_UNINSTALL ON)
 set(SDL_TEST OFF CACHE BOOL "" FORCE)
 add_subdirectory(SDL)
