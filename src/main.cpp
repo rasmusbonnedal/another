@@ -3,11 +3,11 @@
 // If you are new to Dear ImGui, read documentation from the docs/ folder + read the top of imgui.cpp.
 // Read online: https://github.com/ocornut/imgui/tree/master/docs
 
-#include "imgui.h"
-#include "imgui_impl_sdl2.h"
-#include "imgui_impl_opengl3.h"
-#include <stdio.h>
 #include <SDL.h>
+#include <stdio.h>
+#include "imgui.h"
+#include "imgui_impl_opengl3.h"
+#include "imgui_impl_sdl2.h"
 #if defined(IMGUI_IMPL_OPENGL_ES2)
 #include <SDL_opengles2.h>
 #else
@@ -23,6 +23,97 @@
 #include "sound.h"
 
 #include <iostream>
+//#include <stdint.h>
+struct color {
+    unsigned char r;
+    unsigned char g;
+    unsigned char b;
+};
+
+
+std::vector<color> create_palette() {
+    std::vector<color> p;
+    p.resize(16);
+    p[0].r = 40; p[0].g = 40; p[0].b = 60;
+    p[1].r = 60; p[1].g = 60; p[1].b = 85;
+    p[2].r = 60; p[2].g = 85; p[2].b = 125;
+    p[3].r = 85; p[3].g = 170; p[3].b = 255;
+    p[4].r = 125; p[4].g = 125; p[4].b = 125;
+    p[5].r = 255; p[5].g = 190; p[5].b = 170;
+    p[6].r = 190; p[6].g = 125; p[6].b = 125;
+    p[7].r = 255; p[7].g = 190; p[7].b = 170;
+    p[8].r = 170; p[8].g = 60;  p[8].b = 0;
+    p[9].r = 190; p[9].g = 255; p[9].b = 255;
+    p[10].r = 85; p[10].g = 85; p[10].b = 85;
+    p[11].r = 85; p[11].g = 85; p[11].b = 125;
+    p[12].r = 85; p[12].g = 125; p[12].b = 190;
+    p[13].r = 85; p[13].g = 125; p[13].b = 255;
+    p[14].r = 0;  p[14].g = 190; p[14].b = 255;
+    p[15].r = 190; p[15].g = 85; p[15].b = 0;
+
+	return p;
+
+}
+
+void expand_bitmap(unsigned char* input, unsigned int chunck_size, const std::vector<color>& palette, std::vector<unsigned char>& output) {
+    for (int i = 0; i < chunck_size*2; i++) {
+        int bit = 7-(i & 7);
+        int mask = 1 << bit;
+
+		int offset = i >> 3;
+
+		int bit0 = ((input[offset] & mask) == 0)? 0:1;
+        int bit1 = ((input[offset +8000] & mask) == 0) ? 0 : 1;
+        int bit2 = ((input[offset +16000] & mask) == 0) ? 0 : 1;
+        int bit3 = ((input[offset + 24000] & mask) == 0) ? 0 : 1;
+
+        unsigned char top = bit0 | (bit1 << 1) | (bit2 << 2) | (bit3 << 3);
+		#if 1
+		output.push_back(palette[top].r);
+        output.push_back(palette[top].g);
+        output.push_back(palette[top].b);
+#else
+        output.push_back(255);
+        output.push_back(255);
+        output.push_back(255);
+        output.push_back(255);
+        output.push_back(255);
+        output.push_back(255);
+
+#endif
+	}
+}
+
+
+bool LoadTextureFromChunckGL(unsigned char* chunck, unsigned int chunck_size, GLuint& out_texture) {
+
+	std::vector<color> pal = create_palette();
+    std::vector<unsigned char> output;
+    expand_bitmap(chunck, chunck_size, pal, output);
+
+   
+    // Create a OpenGL texture identifier
+    GLuint image_texture;
+    glGenTextures(1, &image_texture);
+    glBindTexture(GL_TEXTURE_2D, image_texture);
+    out_texture = image_texture;
+
+    // Setup filtering parameters for display
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);  // This is required on WebGL for non power-of-two textures
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);  // Same
+
+    // Upload pixels into texture
+#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#endif
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 320, 200, 0, GL_RGB, GL_UNSIGNED_BYTE, &output[0]);
+ 
+    return true;
+}
+
+
 
 void audioWindow(Audio& audio, const ResourceMgr& res) {
     ImGui::Begin("Sound Test");
@@ -39,15 +130,33 @@ void audioWindow(Audio& audio, const ResourceMgr& res) {
     ImGui::End();
 }
 
+static std::vector<GLuint> bitmapsGL;
+
+
 void bmpWindow(const ResourceMgr& res) {
     ImGui::Begin("Bitmaps");
+    static int selected = -1;
     for (int i = 0; i < res.size(); ++i) {
         const auto& r = res.get(i);
         const auto& me = r.memEntry();
         if (me.type == MemList::RT_POLY_ANIM) {
             std::string s = std::to_string(me.bankId) + ": " + std::to_string(i);
-            ImGui::Button(s.c_str());
+            unsigned char* chunck = (unsigned char*)r.data();
+            unsigned int chunck_size = r.size();
+            if (bitmapsGL[i] == 0) {
+                LoadTextureFromChunckGL(chunck, chunck_size, bitmapsGL[i]);
+            }
+            if (ImGui::Button(s.c_str())) {
+                selected = i;
+                
+
+            }
         }
+    }
+    if (selected >= 0) {
+        const auto& r = res.get(selected);
+        ImGui::Image((void*)(intptr_t)bitmapsGL[selected], ImVec2(320, 200));
+
     }
     ImGui::End();
 }
@@ -74,11 +183,11 @@ void bytecodeWindow(const ResourceMgr& res) {
 }
 
 // Main code
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
+
+    bitmapsGL.resize(146, 0);
     // Setup SDL
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
-    {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
         printf("Error: %s\n", SDL_GetError());
         return -1;
     }
@@ -94,7 +203,7 @@ int main(int argc, char* argv[])
 #elif defined(__APPLE__)
     // GL 3.2 Core + GLSL 150
     const char* glsl_version = "#version 150";
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG); // Always required on Mac
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);  // Always required on Mac
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
@@ -117,42 +226,49 @@ int main(int argc, char* argv[])
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-    SDL_Window* window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
+    SDL_Window* window =
+        SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
-    SDL_GL_SetSwapInterval(1); // Enable vsync
+    SDL_GL_SetSwapInterval(1);  // Enable vsync
 
+	
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    ImGuiIO& io = ImGui::GetIO();
+    (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;   // Enable Gamepad Controls
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
-    //ImGui::StyleColorsLight();
+    // ImGui::StyleColorsLight();
 
     // Setup Platform/Renderer backends
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     // Load Fonts
-    // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
+    // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont()
+    // to select them.
     // - AddFontFromFileTTF() will return the ImFont* so you can store it if you need to select the font among multiple.
-    // - If the file cannot be loaded, the function will return a nullptr. Please handle those errors in your application (e.g. use an assertion, or display an error and quit).
-    // - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
+    // - If the file cannot be loaded, the function will return a nullptr. Please handle those errors in your application (e.g. use an
+    // assertion, or display an error and quit).
+    // - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling
+    // ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
     // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use Freetype for higher quality font rendering.
     // - Read 'docs/FONTS.md' for more instructions and details.
     // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-    // - Our Emscripten build process allows embedding fonts to be accessible at runtime from the "fonts/" folder. See Makefile.emscripten for details.
-    //io.Fonts->AddFontDefault();
-    //io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segoeui.ttf", 18.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
-    //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, nullptr, io.Fonts->GetGlyphRangesJapanese());
-    //IM_ASSERT(font != nullptr);
+    // - Our Emscripten build process allows embedding fonts to be accessible at runtime from the "fonts/" folder. See Makefile.emscripten
+    // for details.
+    // io.Fonts->AddFontDefault();
+    // io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segoeui.ttf", 18.0f);
+    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
+    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
+    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
+    // ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, nullptr, io.Fonts->GetGlyphRangesJapanese());
+    // IM_ASSERT(font != nullptr);
 
     MemList memlist;
     if (!memlist.init("..\\..\\data\\memlist.bin")) {
@@ -189,16 +305,17 @@ int main(int argc, char* argv[])
     {
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-        // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
-        // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
-        // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
+        // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of
+        // the mouse data.
+        // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy
+        // of the keyboard data. Generally you may always pass all inputs to dear imgui, and hide them from your application based on those
+        // two flags.
         SDL_Event event;
-        while (SDL_PollEvent(&event))
-        {
+        while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL2_ProcessEvent(&event);
-            if (event.type == SDL_QUIT)
-                done = true;
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(window))
+            if (event.type == SDL_QUIT) done = true;
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE &&
+                event.window.windowID == SDL_GetWindowID(window))
                 done = true;
         }
 
@@ -220,16 +337,16 @@ int main(int argc, char* argv[])
             static float f = 0.0f;
             static int counter = 0;
 
-            ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
+            ImGui::Begin("Hello, world!");  // Create a window called "Hello, world!" and append into it.
 
-            ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-            ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
+            ImGui::Text("This is some useful text.");           // Display some text (you can use a format strings too)
+            ImGui::Checkbox("Demo Window", &show_demo_window);  // Edit bools storing our window open/close state
             ImGui::Checkbox("Another Window", &show_another_window);
 
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-            ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
+            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);             // Edit 1 float using a slider from 0.0f to 1.0f
+            ImGui::ColorEdit3("clear color", (float*)&clear_color);  // Edit 3 floats representing a color
 
-            if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
+            if (ImGui::Button("Button"))  // Buttons return true when clicked (most widgets return true when edited/activated)
                 counter++;
             ImGui::SameLine();
             ImGui::Text("counter = %d", counter);
@@ -239,12 +356,11 @@ int main(int argc, char* argv[])
         }
 
         // 3. Show another simple window.
-        if (show_another_window)
-        {
-            ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
+        if (show_another_window) {
+            ImGui::Begin("Another Window", &show_another_window);  // Pass a pointer to our bool variable (the window will have a closing
+                                                                   // button that will clear the bool when clicked)
             ImGui::Text("Hello from another window!");
-            if (ImGui::Button("Close Me"))
-                show_another_window = false;
+            if (ImGui::Button("Close Me")) show_another_window = false;
             ImGui::End();
         }
 

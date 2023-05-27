@@ -4,6 +4,7 @@
 #include <map>
 #include <stdio.h>
 #include <string>
+#include <algorithm>
 #define NOMINMAX
 #include <WinSock2.h>
 #pragma comment(lib, "Ws2_32.lib")
