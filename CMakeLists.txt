@@ -5,5 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 project(another)
 
+find_package(OpenGL REQUIRED)
+
 add_subdirectory(ext)
 add_subdirectory(src)

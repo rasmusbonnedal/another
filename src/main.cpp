@@ -56,7 +56,7 @@ std::vector<color> create_palette() {
 }
 
 void expand_bitmap(unsigned char* input, unsigned int chunck_size, const std::vector<color>& palette, std::vector<unsigned char>& output) {
-    for (int i = 0; i < chunck_size*2; i++) {
+    for (unsigned i = 0; i < chunck_size*2; i++) {
         int bit = 7-(i & 7);
         int mask = 1 << bit;
 
@@ -142,7 +142,7 @@ void bmpWindow(const ResourceMgr& res) {
         if (me.type == MemList::RT_POLY_ANIM) {
             std::string s = std::to_string(me.bankId) + ": " + std::to_string(i);
             unsigned char* chunck = (unsigned char*)r.data();
-            unsigned int chunck_size = r.size();
+            unsigned int chunck_size = (unsigned int)r.size();
             if (bitmapsGL[i] == 0) {
                 LoadTextureFromChunckGL(chunck, chunck_size, bitmapsGL[i]);
             }
