@@ -24,6 +24,55 @@
 
 #include <iostream>
 
+void audioWindow(Audio& audio, const ResourceMgr& res) {
+    ImGui::Begin("Sound Test");
+    for (int i = 0; i < res.size(); ++i) {
+        const auto& r = res.get(i);
+        const auto& me = r.memEntry();
+        if (me.type == MemList::RT_SOUND && me.size > 0) {
+            std::string s = std::to_string(me.bankId) + ": " + std::to_string(me.size);
+            if (ImGui::Button(s.c_str())) {
+                playsound(audio, r.data(), r.size());
+            }
+        }
+    }
+    ImGui::End();
+}
+
+void bmpWindow(const ResourceMgr& res) {
+    ImGui::Begin("Bitmaps");
+    for (int i = 0; i < res.size(); ++i) {
+        const auto& r = res.get(i);
+        const auto& me = r.memEntry();
+        if (me.type == MemList::RT_POLY_ANIM) {
+            std::string s = std::to_string(me.bankId) + ": " + std::to_string(i);
+            ImGui::Button(s.c_str());
+        }
+    }
+    ImGui::End();
+}
+
+void bytecodeWindow(const ResourceMgr& res) {
+    ImGui::Begin("Byte Code");
+    static int selected = -1;
+    for (int i = 0; i < res.size(); ++i) {
+        const auto& r = res.get(i);
+        const auto& me = r.memEntry();
+        if (me.type == MemList::RT_BYTECODE) {
+            std::string s = std::to_string(me.bankId) + ": " + std::to_string(i);
+            if (ImGui::Button(s.c_str())) {
+                selected = i;
+            }
+        }
+    }
+    if (selected >= 0) {
+        const auto& r = res.get(selected);
+        std::string s = r.dump();
+        ImGui::TextUnformatted(s.c_str());
+    }
+    ImGui::End();
+}
+
 // Main code
 int main(int argc, char* argv[])
 {
@@ -110,18 +159,20 @@ int main(int argc, char* argv[])
         std::cout << "Could not read memlist.bin" << std::endl;
         return 0;
     }
+    ResourceMgr resources(memlist);
     Audio audio;
     audio.play();
-    for (int i = 0; i < memlist.entries(); ++i) {
-        const MemList::MemEntry& me = memlist.entry(i);
-        if (me.size == me.unpackedSize && me.type == MemList::RT_SOUND && me.size > 0) {
-            Resource r1(memlist.entry(i));
-            playsound(audio, r1.data(), r1.size());
+
+    for (int i = 0; i < resources.size(); i++) {
+        const auto& r = resources.get(i);
+        const auto& me = r.memEntry();
+        if (me.type == MemList::RT_SOUND && me.size != 0) {
+            playsound(audio, r.data(), r.size());
         }
     }
 
     // Our state
-    bool show_demo_window = true;
+    bool show_demo_window = false;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
@@ -155,6 +206,10 @@ int main(int argc, char* argv[])
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
+
+        audioWindow(audio, resources);
+        bmpWindow(resources);
+        bytecodeWindow(resources);
 
         // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
         if (show_demo_window)

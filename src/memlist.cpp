@@ -4,6 +4,7 @@
 #include <map>
 #include <stdio.h>
 #include <string>
+#define NOMINMAX
 #include <WinSock2.h>
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -39,19 +40,16 @@ bool MemList::init(const std::string& filename) {
 
     for (int i = 0; i < m_meminfo.size(); ++i) {
         const auto& d = m_meminfo[i];
-        if (d.size == d.unpackedSize) {
-            printf("%d: 0x%x\t0x%x\t0x%x\t0x%x\t0x%x\n", i, d.type, d.bankId, d.offset, d.size, d.unpackedSize);
-        }
         stats[d.type]++;
         stats_unp_size[d.type] += d.unpackedSize;
         stats_pack_size[d.type] += d.size;
     }
-    for (auto& [k, v] : stats) {
-        printf("%d: %d %d %d\n", k, v, stats_pack_size[k], stats_unp_size[k]);
-    }
-
     fclose(f1);
     return true;
+}
+
+extern "C" {
+uint32_t bytekiller_unpack(uint8_t* dst, int dstSize, const uint8_t* src, int srcSize);
 }
 
 Resource::Resource(const MemList::MemEntry& me) {
@@ -70,5 +68,69 @@ Resource::Resource(const MemList::MemEntry& me) {
         std::cout << "Error reading " << me.size << " bytes from " << filename << std::endl;
         return;
     }
+    if (me.unpackedSize != me.size) {
+        std::vector<char> unp(me.unpackedSize);
+        uint32_t result = bytekiller_unpack((uint8_t*)unp.data(), (int)unp.size(), (uint8_t*)m_data.data(), (int)m_data.size());
+        m_data = unp;
+    }
+    m_me = me;
     fclose(f1);
+}
+
+std::string Resource::dump() const {
+    std::string retval;
+    char buf[256];
+    for (int i = 0; i < (m_data.size() + 7) / 8; ++i) {
+        int ofs = i * 8;
+        int num = std::min(8, (int)m_data.size() - ofs);
+        sprintf(buf, "%4.4x: ", ofs);
+        retval.append(buf);
+        for (int j = 0; j < num; j++) {
+            sprintf(buf, "%2.2x ", (char)data()[ofs + j] & 0xff);
+            retval.append(buf);
+        }
+        for (int j = num; j < 8; ++j) {
+            sprintf(buf, "   ");
+            retval.append(buf);
+        }
+        sprintf(buf, "   ");
+        retval.append(buf);
+        for (int j = 0; j < num; j++) {
+            char c = data()[ofs + j];
+            if (c < 32 || (c & 0x80)) c = '.';
+            sprintf(buf, "%c", c);
+            retval.append(buf);
+        }
+        sprintf(buf, "\n");
+        retval.append(buf);
+    }
+    return retval;
+}
+
+void Resource::dump(int width) const {
+    for (int i = 0; i < (m_data.size() + width - 1) / width; ++i) {
+        int ofs = i * width;
+        int num = std::min(width, (int)m_data.size() - ofs);
+        printf("%4.4x: ", ofs);
+        for (int j = 0; j < num; j++) {
+            char c = data()[ofs + j];
+            if (c < 32 || (c & 0x80)) c = '.';
+            printf("%c", c);
+        }
+        printf("\n");
+    }
+}
+
+ResourceMgr::ResourceMgr(const MemList& memlist) {
+    for (int i = 0; i < memlist.entries(); ++i) {
+        m_resources.emplace_back(memlist.entry(i));    
+    }
+}
+
+const Resource& ResourceMgr::get(size_t i) const {
+    return m_resources[i];
+}
+
+size_t ResourceMgr::size() const {
+    return m_resources.size();
 }

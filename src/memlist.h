@@ -6,7 +6,7 @@
 
 class MemList {
    public:
-    enum { RT_SOUND = 0, RT_MUSIC = 1, RT_POLY_ANIM = 2, RT_PALETTE = 3, RT_BYTECODE = 4, RT_POLY_CINEMATIC = 5 };
+    enum { RT_SOUND = 0, RT_MUSIC = 1, RT_POLY_ANIM = 2, RT_PALETTE = 3, RT_BYTECODE = 4, RT_POLY_CINEMATIC = 5, RT_WHATISTHIS};
     struct MemEntry {
         int type;
         int bankId;
@@ -45,6 +45,26 @@ class Resource {
         return m_data.size();
     }
 
+    const MemList::MemEntry& memEntry() const {
+        return m_me;
+    }
+
+    std::string dump() const;
+    void dump(int width) const;
+
    private:
     std::vector<char> m_data;
+    MemList::MemEntry m_me;
+};
+
+class ResourceMgr {
+   public:
+    ResourceMgr(const MemList& memlist);
+
+    const Resource& get(size_t i) const;
+
+    size_t size() const;
+
+   private:
+    std::vector<Resource> m_resources;
 };
